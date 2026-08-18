@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Catalog — Spaced Repetition</title>
+<meta name="theme-color" content="#26302A">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEF2EA;
+    --card:#FBFCF9;
+    --ink:#26302A;
+    --ink-soft:#5E6B5F;
+    --rust:#B5604C;
+    --sage:#5C7A5C;
+    --brass:#8AA17B;
+    --line:#DAE3D6;
+    --shadow: 0 1px 0 rgba(38,48,42,0.05), 0 8px 20px -12px rgba(38,48,42,0.30);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{height:100%; overscroll-behavior:none;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(38,48,42,0.05) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace; letter-spacing:0.03em;}
+  .display{font-family:'Fraunces', serif;}
+
+  #app{max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(16px + env(safe-area-inset-top)) 20px 14px;
+  }
+  header.top .word{font-size:13px; text-transform:uppercase; letter-spacing:0.18em; color:var(--ink-soft);}
+  header.top .word b{color:var(--ink);}
+  .iconbtn{
+    background:none; border:1px solid var(--line); color:var(--ink);
+    width:44px; height:44px; border-radius:9px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono'; font-size:17px; flex-shrink:0;
+  }
+  .iconbtn:active{background:var(--line);}
+
+  main{flex:1; padding:0 20px 100px; display:flex; flex-direction:column; gap:14px;}
+
+  /* ---------- Library / drawers ---------- */
+  .group{display:flex; flex-direction:column; gap:8px;}
+  .group-header{
+    display:flex; align-items:center; gap:10px; padding:2px 4px; cursor:pointer;
+  }
+  .group-header .tab-sm{width:14px; height:14px; background:var(--brass); border-radius:3px; flex-shrink:0;}
+  .group-header h4{margin:0; font-size:13px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft); flex:1;}
+  .group-header .chev-sm{color:var(--ink-soft); font-size:15px; transition:transform .15s ease;}
+  .group-header.collapsed .chev-sm{transform:rotate(-90deg);}
+  .group-body{display:flex; flex-direction:column; gap:10px; padding-left:6px; border-left:2px solid var(--line); margin-left:7px;}
+  .group-body.collapsed{display:none;}
+
+  .drawer{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    box-shadow:var(--shadow); position:relative; overflow:hidden;
+    padding:18px 18px 16px; cursor:pointer; transition:transform .12s ease;
+    min-height:44px;
+  }
+  .drawer:active{transform:scale(0.985);}
+  .drawer .tab{
+    position:absolute; top:0; left:24px; width:64px; height:8px;
+    background:var(--brass); border-radius:0 0 4px 4px;
+  }
+  .drawer h3{margin:6px 0 10px; font-size:20px; font-weight:600;}
+  .drawer .stats{display:flex; gap:16px; font-size:12px; flex-wrap:wrap;}
+  .drawer .stat{display:flex; align-items:center; gap:6px; color:var(--ink-soft);}
+  .drawer .dot{width:7px; height:7px; border-radius:50%;}
+  .drawer .dot.due{background:var(--rust);}
+  .drawer .dot.new{background:var(--sage);}
+  .drawer .dot.total{background:var(--brass);}
+
+  .drawer.reorderable{padding:18px 96px 16px 18px;}
+  .reorderbtns{
+    position:absolute; right:0; top:0; bottom:0; width:76px;
+    display:flex; flex-direction:column; border-left:1px solid var(--line);
+  }
+  .reorderbtns button{
+    flex:1; background:transparent; border:none; color:var(--brass); cursor:pointer;
+    font-size:16px; display:flex; align-items:center; justify-content:center;
+  }
+  .reorderbtns button:first-child{border-bottom:1px solid var(--line);}
+  .reorderbtns button:active{background:var(--paper);}
+  .reorderbtns button:disabled{color:var(--line); cursor:default;}
+
+  .drawer.selectable{padding:18px 52px 16px 18px; transition:background .1s ease, border-color .1s ease;}
+  .drawer.selectable.selected{background:#F1EAD8; border-color:var(--brass);}
+  .drawer .checkmark{
+    position:absolute; right:16px; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border-radius:50%; border:1.5px solid var(--brass);
+    color:var(--card); background:var(--brass); font-size:14px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .drawer.selectable:not(.selected) .checkmark{background:transparent; color:transparent;}
+  .checkmark.sm{
+    width:18px; height:18px; border-radius:5px; border:1.5px solid var(--brass);
+    background:transparent; color:transparent; font-size:11px; font-weight:700; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .checkmark.sm.checked{background:var(--brass); color:var(--card);}
+  .iconbtn.active{background:var(--ink); color:var(--card); border-color:var(--ink);}
+
+  .empty{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty .display{font-size:24px; color:var(--ink); margin-bottom:8px;}
+
+  /* ---------- Study ---------- */
+  .study-main{flex:1; display:flex; flex-direction:column;}
+  .study-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding-top:6px;}
+  .progress-line{width:100%; height:2px; background:var(--line); border-radius:2px; overflow:hidden; flex-shrink:0;}
+  .progress-line > div{height:100%; background:var(--brass); transition:width .25s ease;}
+
+  .card{
+    width:100%; min-height:42vh; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; box-shadow:var(--shadow); position:relative;
+    padding:40px 26px 30px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; gap:20px;
+    user-select:none; -webkit-user-select:none;
+  }
+  .card .stamp{
+    position:absolute; top:16px; right:18px; border:1.5px solid var(--rust); color:var(--rust);
+    font-size:10px; padding:3px 8px; border-radius:3px; transform:rotate(-6deg);
+    font-family:'IBM Plex Mono'; letter-spacing:0.08em; opacity:0.85;
+  }
+  .card .front{
+    font-family:'Fraunces','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;
+    font-size:44px; line-height:1.5; font-weight:500;
+  }
+  .card .rule{width:56px; height:1px; background:var(--line);}
+  .card .back{
+    font-family:'IBM Plex Sans','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;
+    font-size:19px; color:var(--ink-soft); line-height:1.7;
+  }
+  .card .back img{max-width:100%; border-radius:6px; margin-top:4px;}
+
+  /* Fixed, thumb-reachable action zone pinned to the bottom of the screen */
+  .study-actions{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    background:linear-gradient(to top, var(--paper) 60%, transparent);
+    padding:16px 20px calc(18px + env(safe-area-inset-bottom));
+  }
+  .study-actions-inner{max-width:600px; margin:0 auto;}
+
+  .gradebtns{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; width:100%;}
+  .gradebtns button{
+    border:none; border-radius:12px; padding:16px 4px 13px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    font-family:'IBM Plex Sans'; font-weight:600; font-size:13.5px; color:#fff;
+    min-height:60px; box-shadow:var(--shadow);
+  }
+  .gradebtns button span.iv{font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:400; opacity:0.9;}
+  .g-again{background:#B15C4A;}
+  .g-hard{background:#BF8B4E;}
+  .g-good{background:var(--sage);}
+  .g-easy{background:#4F7E86;}
+  .gradebtns button:active{filter:brightness(0.92); transform:scale(0.97);}
+
+  .notebtn{
+    width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:11px; margin-bottom:10px; cursor:pointer; color:var(--ink-soft);
+    font-family:'IBM Plex Sans'; font-weight:600; font-size:13px;
+  }
+  .notebtn.has-note{color:var(--sage); border-color:var(--sage);}
+  .notebtn:active{background:var(--paper);}
+
+  .note-modal .modal-card{max-width:420px;}
+  .note-tabs{display:flex; background:var(--paper); border-radius:8px; padding:3px; gap:3px; margin-bottom:12px;}
+  .note-tabs button{
+    flex:1; border:none; background:transparent; color:var(--ink-soft); padding:8px; border-radius:6px;
+    font-family:'IBM Plex Sans'; font-weight:600; font-size:12.5px; cursor:pointer;
+  }
+  .note-tabs button.active{background:var(--ink); color:var(--card);}
+  .note-textarea{
+    width:100%; min-height:120px; background:var(--card); border:1px solid var(--line); border-radius:8px;
+    padding:12px; font-family:'IBM Plex Sans'; font-size:15px; color:var(--ink); resize:vertical;
+  }
+  .note-canvas-wrap{border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; touch-action:none;}
+  .note-canvas-wrap canvas{display:block; width:100%; touch-action:none;}
+  .note-canvas-tools{display:flex; justify-content:flex-end; margin-top:8px;}
+
+  .hintbar{
+    text-align:center; padding:16px; border:1px dashed var(--line); border-radius:12px;
+    color:var(--ink-soft); font-size:12.5px; text-transform:uppercase; letter-spacing:0.1em;
+    background:var(--card);
+  }
+
+  .selectbar{display:flex; flex-direction:column; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; box-shadow:var(--shadow);}
+  .ordertoggle{display:flex; background:var(--paper); border-radius:8px; padding:3px; gap:3px;}
+  .ordertoggle button{
+    flex:1; border:none; background:transparent; color:var(--ink-soft); padding:8px; border-radius:6px;
+    font-family:'IBM Plex Sans'; font-weight:600; font-size:12.5px; cursor:pointer;
+  }
+  .ordertoggle button.active{background:var(--ink); color:var(--card);}
+  .deletebtn{color:var(--rust); border-color:var(--rust);}
+
+  .done{text-align:center; padding:60px 20px;}
+  .done .display{font-size:26px; margin-bottom:8px;}
+  .done p{color:var(--ink-soft);}
+
+  /* ---------- Editor ---------- */
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field label{font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-soft);}
+  .field textarea, .field input{
+    background:var(--card); border:1px solid var(--line); border-radius:8px;
+    padding:12px; font-family:'IBM Plex Sans'; font-size:15px; color:var(--ink); resize:vertical;
+  }
+  .field textarea{min-height:70px;}
+  .primarybtn{
+    background:var(--ink); color:var(--card); border:none; border-radius:9px;
+    padding:13px; font-weight:600; cursor:pointer; font-size:14px;
+  }
+  .secondarybtn{
+    background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:9px;
+    padding:13px; font-weight:600; cursor:pointer; font-size:14px;
+  }
+  .row{display:flex; gap:10px;}
+  .row > *{flex:1;}
+
+  /* ---------- Import ---------- */
+  .droptray{
+    border:1.5px dashed var(--brass); border-radius:12px; padding:40px 20px;
+    text-align:center; background:var(--card); cursor:pointer;
+  }
+  .droptray .display{font-size:20px; margin-bottom:6px;}
+  .droptray p{color:var(--ink-soft); font-size:13px; margin:0;}
+  .importprog{display:flex; flex-direction:column; gap:10px; align-items:center; padding:30px 10px;}
+  .importprog .mono{font-size:13px; color:var(--ink-soft);}
+
+  /* ---------- Nav ---------- */
+  nav.bottom{
+    position:sticky; bottom:0; background:linear-gradient(to top, var(--paper) 70%, transparent);
+    padding:14px 20px 22px; display:flex; gap:10px; justify-content:center;
+  }
+  nav.bottom button{
+    background:var(--ink); color:var(--card); border:none; border-radius:100px;
+    padding:13px 22px; font-weight:600; font-size:13px; cursor:pointer;
+    display:flex; align-items:center; gap:7px; box-shadow:var(--shadow);
+  }
+  nav.bottom button.ghost{background:var(--card); color:var(--ink); border:1px solid var(--line);}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--card); padding:11px 18px; border-radius:8px;
+    font-size:13px; z-index:50; box-shadow:var(--shadow); max-width:86%; text-align:center;
+  }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(43,42,40,0.45); z-index:60;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .modal-card{
+    background:var(--card); border-radius:14px; padding:22px; width:100%; max-width:340px;
+    box-shadow:0 20px 40px -12px rgba(43,42,40,0.5); border:1px solid var(--line);
+  }
+  .deletebtn-solid{background:var(--rust); color:#fff;}
+
+  ::selection{background:var(--brass); color:var(--card);}
+  a{color:var(--ink);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<script>
+/* ============================= DB LAYER ============================= */
+const DB_NAME = 'catalog-db';
+const DB_VERSION = 2;
+let dbPromise = null;
+
+function openDB(){
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('decks')) {
+        db.createObjectStore('decks', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('cards')) {
+        const store = db.createObjectStore('cards', { keyPath: 'id' });
+        store.createIndex('deckId', 'deckId', { unique: false });
+        store.createIndex('due', 'due', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('media')) {
+        db.createObjectStore('media', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('notes')) {
+        const noteStore = db.createObjectStore('notes', { keyPath: 'cardId' });
+        noteStore.createIndex('cardId', 'cardId', { unique: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+function tx(storeNames, mode = 'readonly') {
+  return openDB().then(db => db.transaction(storeNames, mode));
+}
+
+function idbPut(store, value) {
+  return tx([store], 'readwrite').then(t => new Promise((res, rej) => {
+    const r = t.objectStore(store).put(value);
+    r.onsuccess = () => res(value);
+    r.onerror = () => rej(r.error);
+  }));
+}
+function idbDelete(store, key) {
+  return tx([store], 'readwrite').then(t => new Promise((res, rej) => {
+    const r = t.objectStore(store).delete(key);
+    r.onsuccess = () => res();
+    r.onerror = () => rej(r.error);
+  }));
+}
+function idbGetAll(store) {
+  return tx([store]).then(t => new Promise((res, rej) => {
+    const r = t.objectStore(store).getAll();
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+}
+function idbGet(store, key) {
+  return tx([store]).then(t => new Promise((res, rej) => {
+    const r = t.objectStore(store).get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+}
+function idbGetByIndex(store, index, key) {
+  return tx([store]).then(t => new Promise((res, rej) => {
+    const r = t.objectStore(store).index(index).getAll(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  }));
+}
+
+/* ============================= SCHEDULER (SM-2 + learning steps) ============================= */
+// Learning steps in minutes for brand-new / lapsed cards before they graduate to daily review.
+const LEARNING_STEPS = [1, 10];
+
+function newCardState() {
+  return {
+    state: 'new',       // new | learning | review
+    step: 0,
+    ease: 2.5,
+    interval: 0,        // days (once in review)
+    reps: 0,
+    lapses: 0,
+    due: Date.now(),
+    createdAt: Date.now()
+  };
+}
+
+function grade(card, rating) {
+  // rating: 'again' | 'hard' | 'good' | 'easy'
+  const now = Date.now();
+  const c = { ...card };
+  c.reps = (c.reps || 0) + 1;
+
+  if (c.state === 'new' || c.state === 'learning') {
+    if (rating === 'again') {
+      c.state = 'learning'; c.step = 0;
+      c.due = now + LEARNING_STEPS[0] * 60000;
+    } else if (rating === 'hard') {
+      c.state = 'learning';
+      c.due = now + LEARNING_STEPS[Math.min(c.step, LEARNING_STEPS.length - 1)] * 60000;
+    } else if (rating === 'good') {
+      const next = (c.step || 0) + 1;
+      if (next >= LEARNING_STEPS.length) {
+        c.state = 'review'; c.interval = 1; c.due = now + 86400000; c.step = 0;
+      } else {
+        c.state = 'learning'; c.step = next;
+        c.due = now + LEARNING_STEPS[next] * 60000;
+      }
+    } else if (rating === 'easy') {
+      c.state = 'review'; c.interval = 4; c.ease = (c.ease || 2.5) + 0.15;
+      c.due = now + 4 * 86400000; c.step = 0;
+    }
+  } else {
+    // review state — classic SM-2 style
+    if (rating === 'again') {
+      c.lapses = (c.lapses || 0) + 1;
+      c.ease = Math.max(1.3, (c.ease || 2.5) - 0.2);
+      c.state = 'learning'; c.step = 0;
+      c.due = now + LEARNING_STEPS[0] * 60000;
+    } else if (rating === 'hard') {
+      c.ease = Math.max(1.3, (c.ease || 2.5) - 0.15);
+      c.interval = Math.max(1, Math.round(c.interval * 1.2));
+      c.due = now + c.interval * 86400000;
+    } else if (rating === 'good') {
+      c.interval = Math.max(1, Math.round(c.interval * (c.ease || 2.5)));
+      c.due = now + c.interval * 86400000;
+    } else if (rating === 'easy') {
+      c.ease = (c.ease || 2.5) + 0.15;
+      c.interval = Math.max(1, Math.round(c.interval * (c.ease || 2.5) * 1.3));
+      c.due = now + c.interval * 86400000;
+    }
+  }
+  return c;
+}
+
+function previewIntervalLabel(card, rating) {
+  const g = grade(card, rating);
+  const ms = g.due - Date.now();
+  if (g.state !== 'review') {
+    const mins = Math.round(ms / 60000);
+    return mins < 60 ? `${mins}m` : `${Math.round(mins/60)}h`;
+  }
+  const days = Math.round(ms / 86400000);
+  if (days < 1) return '<1d';
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.round(days/30)}mo`;
+  return `${(days/365).toFixed(1)}y`;
+}
+
+/* ============================= ANKI TEMPLATE RENDERING ============================= */
+function stripSound(s) {
+  return (s || '').replace(/\[sound:[^\]]+\]/g, '');
+}
+
+function renderTemplate(tmpl, fieldMap, mediaMap, frontRendered) {
+  let out = tmpl || '';
+  // conditionals {{#Field}}...{{/Field}} and {{^Field}}...{{/Field}}
+  out = out.replace(/{{#([^}]+)}}([\s\S]*?){{\/\1}}/g, (m, f, inner) => {
+    const v = fieldMap[f.trim()];
+    return v && v.trim() ? inner : '';
+  });
+  out = out.replace(/{{\^([^}]+)}}([\s\S]*?){{\/\1}}/g, (m, f, inner) => {
+    const v = fieldMap[f.trim()];
+    return (!v || !v.trim()) ? inner : '';
+  });
+  out = out.replace(/{{FrontSide}}/g, frontRendered || '');
+  out = out.replace(/{{[^}]*:([^}]+)}}/g, (m, f) => fieldMap[f.trim()] || ''); // {{hint:Field}} etc → raw field
+  out = out.replace(/{{([^}]+)}}/g, (m, f) => {
+    f = f.trim();
+    if (f === 'Tags' || f === 'Type' || f === 'Deck' || f === 'Card' || f === 'Subdeck') return '';
+    return fieldMap[f] != null ? fieldMap[f] : '';
+  });
+  out = stripSound(out);
+  // swap media filenames for blob URLs
+  out = out.replace(/src="([^"]+)"/g, (m, src) => {
+    if (mediaMap && mediaMap[src]) return `src="${mediaMap[src]}"`;
+    return m;
+  });
+  return out;
+}
+
+function textOnly(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.textContent.trim();
+}
+
+/* ============================= APKG IMPORT ============================= */
+let SQL = null;
+async function getSQL() {
+  if (SQL) return SQL;
+  SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+  return SQL;
+}
+
+async function importApkg(file, onProgress) {
+  onProgress('Unzipping deck…');
+  const zip = await JSZip.loadAsync(file);
+  const dbFile = zip.file('collection.anki21') || zip.file('collection.anki2');
+  if (!dbFile) {
+    throw new Error("This .apkg doesn't include a compatible database. In Anki, re-export with “Support older Anki versions” checked, then try again.");
+  }
+  const dbBuf = await dbFile.async('uint8array');
+
+  onProgress('Reading media…');
+  const mediaMap = {}; // originalFilename → blobURL
+  const mediaEntry = zip.file('media');
+  if (mediaEntry) {
+    try {
+      const mediaJson = JSON.parse(await mediaEntry.async('text'));
+      const entries = Object.entries(mediaJson); // {"0": "foo.jpg", ...}
+      for (const [num, filename] of entries) {
+        const f = zip.file(num);
+        if (!f) continue;
+        const blob = await f.async('blob');
+        mediaMap[filename] = URL.createObjectURL(blob);
+      }
+    } catch (e) { /* no media, ignore */ }
+  }
+
+  onProgress('Opening database…');
+  const sql = await getSQL();
+  const sdb = new sql.Database(dbBuf);
+
+  const colRows = sdb.exec('SELECT decks, models FROM col');
+  if (!colRows.length) throw new Error('Could not read deck info from this file.');
+  const [decksJson, modelsJson] = colRows[0].values[0];
+  const ankiDecks = JSON.parse(decksJson);
+  const ankiModels = JSON.parse(modelsJson);
+
+  onProgress('Reading notes…');
+  const notesRes = sdb.exec('SELECT id, mid, flds, tags FROM notes');
+  const notesById = {};
+  if (notesRes.length) {
+    for (const row of notesRes[0].values) {
+      const [id, mid, flds, tags] = row;
+      notesById[id] = { mid, flds: flds.split('\x1f'), tags };
+    }
+  }
+
+  onProgress('Reading cards…');
+  const cardsRes = sdb.exec('SELECT id, nid, did, ord FROM cards');
+  const importedByDeck = {}; // ankiDeckId → array of {front, back}
+
+  if (cardsRes.length) {
+    for (const row of cardsRes[0].values) {
+      const [cid, nid, did, ord] = row;
+      const note = notesById[nid];
+      if (!note) continue;
+      const model = ankiModels[note.mid];
+      if (!model) continue;
+      const fieldNames = model.flds.map(f => f.name);
+      const fieldMap = {};
+      fieldNames.forEach((name, i) => { fieldMap[name] = note.flds[i] || ''; });
+      const tmpl = model.tmpls[ord];
+      if (!tmpl) continue;
+      const frontHtml = renderTemplate(tmpl.qfmt, fieldMap, mediaMap, '');
+      const backHtml = renderTemplate(tmpl.afmt, fieldMap, mediaMap, frontHtml);
+
+      const front = frontHtml.trim();
+      let back = backHtml.trim();
+      // Anki's afmt usually repeats the front; trim a leading duplicate + <hr> if present.
+      back = back.replace(/^[\s\S]*?<hr[^>]*>/i, '').trim() || back;
+
+      if (!front) continue;
+      if (!importedByDeck[did]) importedByDeck[did] = [];
+      importedByDeck[did].push({ front, back });
+    }
+  }
+  sdb.close();
+
+  onProgress('Saving to your library…');
+  const deckIds = Object.keys(importedByDeck);
+
+  // Work out how each Anki deck should map to a name + optional group.
+  // Two cases:
+  //  1. True Anki subdecks, named "Parent::Child" (e.g. "HSK::HSK 1").
+  //  2. Flat sibling decks that just share a text prefix before a trailing
+  //     number (e.g. "HSK 1", "HSK 2", "HSK 3") — how most downloaded HSK
+  //     packs are actually structured, with no "::" at all.
+  const deckMetas = deckIds.map(did => {
+    const ankiDeck = ankiDecks[did];
+    const rawName = ankiDeck ? ankiDeck.name : 'Imported deck';
+    const parts = rawName.split('::').filter(Boolean);
+    return { did, parts };
+  });
+
+  const prefixCounts = {};
+  const prefixCasing = {};
+  for (const m of deckMetas) {
+    if (m.parts.length > 1) continue; // already grouped via ::
+    const match = m.parts[0].match(/^(.*?)[\s\-_]+(\d+)$/);
+    if (match) {
+      const prefix = match[1].trim();
+      if (prefix.length >= 2) {
+        const key = prefix.toLowerCase();
+        prefixCounts[key] = (prefixCounts[key] || 0) + 1;
+        if (!prefixCasing[key]) prefixCasing[key] = prefix;
+      }
+    }
+  }
+
+  for (const m of deckMetas) {
+    if (m.parts.length > 1) {
+      m.group = m.parts[0];
+      m.name = m.parts.slice(1).join(' › ');
+      continue;
+    }
+    const leaf = m.parts[0];
+    const match = leaf.match(/^(.*?)[\s\-_]+(\d+)$/);
+    if (match) {
+      const key = match[1].trim().toLowerCase();
+      if (prefixCounts[key] >= 2) {
+        m.group = prefixCasing[key];
+        m.name = leaf;
+        continue;
+      }
+    }
+    m.group = null;
+    m.name = leaf;
+  }
+
+  // Give decks a stable default order that sorts numeric suffixes naturally
+  // (HSK 1, HSK 2 … HSK 10), rather than whatever order they happened to
+  // appear in inside the .apkg — the user can still drag this around later.
+  const naturalSort = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  const byGroupForOrder = {};
+  for (const m of deckMetas) {
+    const key = m.group || '\0loose';
+    if (!byGroupForOrder[key]) byGroupForOrder[key] = [];
+    byGroupForOrder[key].push(m);
+  }
+  for (const key of Object.keys(byGroupForOrder)) {
+    byGroupForOrder[key].sort(naturalSort).forEach((m, i) => { m.order = i; });
+  }
+
+  let totalCards = 0;
+  for (const m of deckMetas) {
+    const deckId = 'd_' + crypto.randomUUID();
+    await idbPut('decks', { id: deckId, name: m.name, group: m.group, order: m.order, createdAt: Date.now() });
+    for (const c of importedByDeck[m.did]) {
+      const card = {
+        id: 'c_' + crypto.randomUUID(),
+        deckId,
+        front: c.front,
+        back: c.back,
+        ...newCardState()
+      };
+      await idbPut('cards', card);
+      totalCards++;
+    }
+  }
+  return { deckCount: deckIds.length, cardCount: totalCards };
+}
+
+/* ============================= APP STATE / ROUTER ============================= */
+const state = {
+  view: 'library',
+  decks: [],
+  studyDeckIds: [],
+  studyOrder: 'random', // 'random' | 'sequential'
+  queue: [],
+  currentIndex: 0,
+  revealed: false,
+  editingCard: null,
+  toastMsg: null,
+  selectMode: false,
+  reorderMode: false,
+  selectedDecks: new Set(),
+  collapsedGroups: new Set(),
+  pendingDelete: null,
+  noteModalOpen: false,
+  noteTab: 'type', // 'type' | 'draw'
+  currentNote: null, // {cardId, text, drawing} loaded when notepad opens
+  noteHasDrawing: false,
+  showBackup: false
+};
+
+function showToast(msg) {
+  state.toastMsg = msg;
+  render();
+  setTimeout(() => { state.toastMsg = null; render(); }, 2600);
+}
+
+async function refreshDecks() {
+  const decks = await idbGetAll('decks');
+  const withStats = [];
+  for (const d of decks) {
+    const cards = await idbGetByIndex('cards', 'deckId', d.id);
+    const now = Date.now();
+    const due = cards.filter(c => c.state !== 'new' && c.due <= now).length;
+    const fresh = cards.filter(c => c.state === 'new').length;
+    withStats.push({ ...d, total: cards.length, due, fresh });
+  }
+  state.decks = withStats;
+}
+
+// Sort a list of decks that share the same group (or the loose/ungrouped
+// list) for display: explicit manual order first, falling back to a
+// natural (numeric-aware) name sort so "HSK 2" comes before "HSK 10".
+function sortDeckGroup(list) {
+  return list.slice().sort((a, b) => {
+    const ao = a.order, bo = b.order;
+    if (ao != null && bo != null) return ao - bo;
+    if (ao != null) return -1;
+    if (bo != null) return 1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+async function moveDeck(deckId, dir, scopeKey) {
+  const scopeList = sortDeckGroup(state.decks.filter(d => (d.group || '\0loose') === scopeKey));
+  const idx = scopeList.findIndex(d => d.id === deckId);
+  const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= scopeList.length) return;
+  [scopeList[idx], scopeList[swapIdx]] = [scopeList[swapIdx], scopeList[idx]];
+  for (let i = 0; i < scopeList.length; i++) {
+    scopeList[i].order = i;
+    await idbPut('decks', scopeList[i]);
+  }
+  await refreshDecks();
+  render();
+}
+
+async function deleteDecks(deckIds) {
+  for (const deckId of deckIds) {
+    const cards = await idbGetByIndex('cards', 'deckId', deckId);
+    for (const c of cards) await idbDelete('cards', c.id);
+    await idbDelete('decks', deckId);
+  }
+}
+
+async function startStudy(deckIds, order) {
+  order = order || state.studyOrder || 'random';
+  let allDue = [], allFresh = [];
+  for (const deckId of deckIds) {
+    const cards = await idbGetByIndex('cards', 'deckId', deckId);
+    const now = Date.now();
+    allDue.push(...cards.filter(c => c.state !== 'new' && c.due <= now));
+    allFresh.push(...cards.filter(c => c.state === 'new'));
+  }
+  let queue;
+  if (order === 'sequential') {
+    allDue.sort((a, b) => a.due - b.due);
+    allFresh.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    queue = [...allDue, ...allFresh.slice(0, 20 * deckIds.length)];
+  } else {
+    allDue.sort(() => Math.random() - 0.5);
+    allFresh.sort(() => Math.random() - 0.5);
+    queue = [...allDue, ...allFresh.slice(0, 20 * deckIds.length)].sort(() => Math.random() - 0.35);
+  }
+  state.studyDeckIds = deckIds;
+  state.studyOrder = order;
+  state.queue = queue;
+  state.currentIndex = 0;
+  state.revealed = false;
+  state.view = 'study';
+  state.selectMode = false;
+  state.selectedDecks = new Set();
+  await refreshNotedCardIds();
+  render();
+}
+
+async function refreshNotedCardIds() {
+  const allNotes = await idbGetAll('notes');
+  state.notedCardIds = new Set(allNotes.filter(n => n.text || n.drawing).map(n => n.cardId));
+}
+
+async function gradeCurrent(rating) {
+  const card = state.queue[state.currentIndex];
+  const updated = grade(card, rating);
+  await idbPut('cards', updated);
+  state.currentIndex++;
+  state.revealed = false;
+  render();
+}
+
+/* ---------- Notes ---------- */
+async function openNote() {
+  const card = state.queue[state.currentIndex];
+  if (!card) return;
+  let note = null;
+  try { note = await idbGet('notes', card.id); } catch (e) { note = null; }
+  state.currentNote = note || { cardId: card.id, text: '', drawing: null };
+  state.noteTab = 'type';
+  state.noteModalOpen = true;
+  render();
+}
+
+async function saveNote() {
+  const card = state.queue[state.currentIndex];
+  if (!card) return;
+  const text = document.getElementById('note-text')?.value.trim() || '';
+  const canvas = document.getElementById('note-canvas');
+  let drawing = state.currentNote?.drawing || null;
+  if (canvas && canvas.dataset.dirty === '1') {
+    drawing = canvas.dataset.blank === '1' ? null : canvas.toDataURL('image/png');
+  }
+  const note = { cardId: card.id, text, drawing, updatedAt: Date.now() };
+  if (!text && !drawing) {
+    try { await idbDelete('notes', card.id); } catch (e) {}
+  } else {
+    await idbPut('notes', note);
+  }
+  await refreshNotedCardIds();
+  state.noteModalOpen = false;
+  render();
+  showToast('Note saved.');
+}
+
+/* ---------- Backup / export-import ---------- */
+async function exportBackup() {
+  const [decks, cards, notes] = await Promise.all([
+    idbGetAll('decks'), idbGetAll('cards'), idbGetAll('notes')
+  ]);
+  const payload = { app: 'catalog', version: 1, exportedAt: Date.now(), decks, cards, notes };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `catalog-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  showToast('Backup downloaded — save it to iCloud/OneDrive/Drive.');
+}
+
+async function importBackupFile(file) {
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if (!payload || !Array.isArray(payload.decks) || !Array.isArray(payload.cards)) {
+      throw new Error('That file doesn\'t look like a Catalog backup.');
+    }
+    for (const d of payload.decks) await idbPut('decks', d);
+    for (const c of payload.cards) await idbPut('cards', c);
+    for (const n of payload.notes || []) await idbPut('notes', n);
+    await refreshDecks();
+    state.showBackup = false;
+    render();
+    showToast(`Imported ${payload.decks.length} deck(s) and ${payload.cards.length} card(s).`);
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || 'Import failed — is that a Catalog backup file?');
+  }
+}
+
+/* ============================= RENDER ============================= */
+const app = document.getElementById('app');
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function drawerHtml(d, scopeList) {
+  const selected = state.selectedDecks.has(d.id);
+  if (state.selectMode) {
+    return `
+      <div class="drawer selectable ${selected ? 'selected' : ''}" data-selectdeck="${d.id}">
+        <div class="tab"></div>
+        <h3>${esc(d.name)}</h3>
+        <div class="stats">
+          <span class="stat"><span class="dot due"></span>${d.due} due</span>
+          <span class="stat"><span class="dot new"></span>${d.fresh} new</span>
+          <span class="stat"><span class="dot total"></span>${d.total} total</span>
+        </div>
+        <span class="checkmark">${selected ? '✓' : ''}</span>
+      </div>
+    `;
+  }
+  if (state.reorderMode && scopeList) {
+    const idx = scopeList.findIndex(x => x.id === d.id);
+    const scopeKey = d.group || '\0loose';
+    return `
+      <div class="drawer reorderable">
+        <div class="tab"></div>
+        <h3>${esc(d.name)}</h3>
+        <div class="stats">
+          <span class="stat"><span class="dot due"></span>${d.due} due</span>
+          <span class="stat"><span class="dot new"></span>${d.fresh} new</span>
+          <span class="stat"><span class="dot total"></span>${d.total} total</span>
+        </div>
+        <div class="reorderbtns">
+          <button data-action="move-deck" data-deckid="${d.id}" data-dir="up" data-scope="${esc(scopeKey)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button data-action="move-deck" data-deckid="${d.id}" data-dir="down" data-scope="${esc(scopeKey)}" ${idx === scopeList.length - 1 ? 'disabled' : ''}>↓</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="drawer" data-deck="${d.id}">
+      <div class="tab"></div>
+      <h3>${esc(d.name)}</h3>
+      <div class="stats">
+        <span class="stat"><span class="dot due"></span>${d.due} due</span>
+        <span class="stat"><span class="dot new"></span>${d.fresh} new</span>
+        <span class="stat"><span class="dot total"></span>${d.total} total</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderLibrary() {
+  const headerActions = `
+    <div style="display:flex; gap:8px;">
+      <button class="iconbtn" data-action="toggle-backup" title="Backup & sync">⇅</button>
+      <button class="iconbtn ${state.reorderMode ? 'active' : ''}" data-action="toggle-reorder" title="Reorder decks">↕</button>
+      <button class="iconbtn ${state.selectMode ? 'active' : ''}" data-action="toggle-select" title="Select decks">${state.selectMode ? '✕' : '☑'}</button>
+    </div>
+  `;
+
+  if (!state.decks.length) {
+    return `
+      <header class="top">
+        <div class="word"><b>Catalog</b> / study</div>
+        <button class="iconbtn" data-action="toggle-backup" title="Backup & sync">⇅</button>
+      </header>
+      <main>
+        <div class="empty">
+          <div class="display">Your catalog is empty</div>
+          <p>Import an Anki deck to get started.</p>
+        </div>
+      </main>
+      <nav class="bottom">
+        <button data-action="go-import">↓ Import .apkg</button>
+      </nav>
+    `;
+  }
+
+  // Group decks that came from a subdeck hierarchy (e.g. HSK::HSK 1, HSK::HSK 2)
+  // — or that just share a name prefix like "HSK 1"/"HSK 2" — under a shared
+  // header. Ungrouped decks render as standalone drawers.
+  const groups = {};
+  const loose = [];
+  for (const d of state.decks) {
+    if (d.group) {
+      if (!groups[d.group]) groups[d.group] = [];
+      groups[d.group].push(d);
+    } else {
+      loose.push(d);
+    }
+  }
+
+  const groupsHtml = Object.keys(groups).sort().map(gname => {
+    const collapsed = state.collapsedGroups.has(gname);
+    const members = sortDeckGroup(groups[gname]);
+    const dueSum = members.reduce((a, d) => a + d.due, 0);
+    const allSelected = state.selectMode && members.every(d => state.selectedDecks.has(d.id));
+    return `
+      <div class="group">
+        <div class="group-header ${collapsed ? 'collapsed' : ''}" data-action="toggle-group" data-group="${esc(gname)}">
+          ${state.selectMode
+            ? `<span class="checkmark sm ${allSelected ? 'checked' : ''}" data-action="select-group" data-group="${esc(gname)}">${allSelected ? '✓' : ''}</span>`
+            : `<div class="tab-sm"></div>`}
+          <h4>${esc(gname)} · ${members.length} decks${dueSum ? ` · ${dueSum} due` : ''}</h4>
+          <span class="chev-sm">⌄</span>
+        </div>
+        <div class="group-body ${collapsed ? 'collapsed' : ''}">
+          ${members.map(d => drawerHtml(d, members)).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const looseSorted = sortDeckGroup(loose);
+  const looseHtml = looseSorted.map(d => drawerHtml(d, looseSorted)).join('');
+
+  const selCount = state.selectedDecks.size;
+  const selectionBar = state.selectMode ? `
+    <div class="study-actions">
+      <div class="study-actions-inner">
+        ${selCount > 0 ? `
+          <div class="selectbar">
+            <div class="ordertoggle">
+              <button class="${state.studyOrder === 'random' ? 'active' : ''}" data-action="set-order" data-order="random">Random</button>
+              <button class="${state.studyOrder === 'sequential' ? 'active' : ''}" data-action="set-order" data-order="sequential">Sequential</button>
+            </div>
+            <div class="row">
+              <button class="secondarybtn deletebtn" data-action="delete-selected">Delete (${selCount})</button>
+              <button class="primarybtn" data-action="study-selected">Study ${selCount} deck${selCount === 1 ? '' : 's'}</button>
+            </div>
+          </div>
+        ` : `<div class="hintbar">Tap decks to select them — pick as many as you like, e.g. all of HSK 1–4 together</div>`}
+      </div>
+    </div>
+  ` : '';
+
+  const reorderBar = state.reorderMode ? `
+    <div class="study-actions">
+      <div class="study-actions-inner">
+        <div class="hintbar">Use the arrows to reorder decks within each list</div>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <header class="top">
+      <div class="word"><b>Catalog</b> / study</div>
+      ${headerActions}
+    </header>
+    <main style="${state.selectMode || state.reorderMode ? 'padding-bottom:150px;' : ''}">${groupsHtml}${looseHtml}</main>
+    ${state.selectMode ? selectionBar : state.reorderMode ? reorderBar : `
+      <nav class="bottom">
+        <button data-action="go-import">↓ Import .apkg</button>
+      </nav>
+    `}
+  `;
+}
+
+function renderStudy() {
+  const studiedDecks = state.decks.filter(d => state.studyDeckIds.includes(d.id));
+  const title = studiedDecks.length === 1 ? studiedDecks[0].name : `${studiedDecks.length} decks`;
+  const total = state.queue.length;
+  const idx = state.currentIndex;
+
+  if (idx >= total) {
+    return `
+      <header class="top">
+        <button class="iconbtn" data-action="go-library">←</button>
+        <div class="word"><b>${esc(title)}</b></div>
+        <span style="width:44px"></span>
+      </header>
+      <main>
+        <div class="done">
+          <div class="display">All caught up</div>
+          <p>No more cards due right now. Come back later — the catalog keeps track.</p>
+        </div>
+      </main>
+      <nav class="bottom"><button data-action="go-library">Back to catalog</button></nav>
+    `;
+  }
+
+  const card = state.queue[idx];
+  const pct = Math.round((idx / total) * 100);
+  const hasNote = !!state.notedCardIds?.has(card.id);
+
+  const actions = state.revealed ? `
+    <button class="notebtn ${hasNote ? 'has-note' : ''}" data-action="open-note">✎ ${hasNote ? 'Edit note' : 'Add note'}</button>
+    <div class="gradebtns">
+      <button class="g-again" data-action="grade" data-rating="again">Again<span class="iv">${previewIntervalLabel(card,'again')}</span></button>
+      <button class="g-hard" data-action="grade" data-rating="hard">Hard<span class="iv">${previewIntervalLabel(card,'hard')}</span></button>
+      <button class="g-good" data-action="grade" data-rating="good">Good<span class="iv">${previewIntervalLabel(card,'good')}</span></button>
+      <button class="g-easy" data-action="grade" data-rating="easy">Easy<span class="iv">${previewIntervalLabel(card,'easy')}</span></button>
+    </div>
+  ` : '';
+
+  return `
+    <header class="top">
+      <button class="iconbtn" data-action="go-library">←</button>
+      <div class="word"><b>${esc(title)}</b></div>
+      <button class="iconbtn" data-action="edit-current" title="Edit card">✎</button>
+    </header>
+    <main class="study-main" style="padding-bottom:${state.revealed ? '210px' : '40px'};">
+      <div class="study-wrap">
+        <div class="progress-line"><div style="width:${pct}%"></div></div>
+        <div class="card" id="study-card">
+          <div class="stamp">${card.state === 'new' ? 'NEW' : card.state.toUpperCase()}</div>
+          <div class="front">${card.front}</div>
+          ${state.revealed ? `<div class="rule"></div><div class="back">${card.back}</div>` : ''}
+        </div>
+      </div>
+    </main>
+    ${state.revealed ? `<div class="study-actions"><div class="study-actions-inner">${actions}</div></div>` : ''}
+  `;
+}
+
+function renderEditor() {
+  const c = state.editingCard || { front: '', back: '' };
+  const isNew = !c.id;
+  const targetDeckId = isNew ? (state.pendingDeckId || (state.studyDeckIds.length === 1 ? state.studyDeckIds[0] : null)) : c.deckId;
+  const targetDeck = state.decks.find(d => d.id === targetDeckId);
+  return `
+    <header class="top">
+      <button class="iconbtn" data-action="cancel-edit">←</button>
+      <div class="word"><b>${isNew ? 'New card' : 'Edit card'}</b></div>
+      <span style="width:44px"></span>
+    </header>
+    <main>
+      ${targetDeck ? `<div class="hintbar" style="border-style:solid;">Into <b>${esc(targetDeck.name)}</b></div>` : ''}
+      <div class="field">
+        <label>Front</label>
+        <textarea id="f-front">${esc(c.front)}</textarea>
+      </div>
+      <div class="field">
+        <label>Back</label>
+        <textarea id="f-back">${esc(c.back)}</textarea>
+      </div>
+      <div class="row">
+        <button class="secondarybtn" data-action="cancel-edit">Cancel</button>
+        <button class="primarybtn" data-action="save-card">Save</button>
+      </div>
+      ${!isNew ? `<button class="secondarybtn" data-action="delete-card" style="color:var(--rust); border-color:var(--rust);">Delete card</button>` : ''}
+    </main>
+  `;
+}
+
+function renderNoteModal() {
+  const n = state.currentNote || { text: '', drawing: null };
+  const tab = state.noteTab;
+  return `
+    <div class="modal-backdrop note-modal" data-action="close-note">
+      <div class="modal-card">
+        <div class="display" style="font-size:18px; margin-bottom:12px;">Word note</div>
+        <div class="note-tabs">
+          <button class="${tab === 'type' ? 'active' : ''}" data-action="note-tab" data-tab="type">Type</button>
+          <button class="${tab === 'draw' ? 'active' : ''}" data-action="note-tab" data-tab="draw">Handwrite</button>
+        </div>
+        <div style="display:${tab === 'type' ? 'block' : 'none'};">
+          <textarea id="note-text" class="note-textarea" placeholder="Mnemonics, usage, anything you want to remember…">${esc(n.text)}</textarea>
+        </div>
+        <div style="display:${tab === 'draw' ? 'block' : 'none'};">
+          <div class="note-canvas-wrap"><canvas id="note-canvas" width="600" height="280"></canvas></div>
+          <div class="note-canvas-tools"><button class="secondarybtn" data-action="clear-drawing" style="padding:7px 14px; font-size:12.5px;">Clear</button></div>
+        </div>
+        <div class="row" style="margin-top:16px;">
+          <button class="secondarybtn" data-action="close-note">Cancel</button>
+          <button class="primarybtn" data-action="save-note">Save note</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBackupModal() {
+  return `
+    <div class="modal-backdrop" data-action="close-backup">
+      <div class="modal-card">
+        <div class="display" style="font-size:18px; margin-bottom:10px;">Backup &amp; sync</div>
+        <p style="color:var(--ink-soft); font-size:13.5px; line-height:1.6; margin:0 0 16px;">
+          Everything — decks, cards, progress and notes — lives only in this browser's local storage on this device. Nothing is sent anywhere, and there's no automatic cloud sync (that would need a server and sign-in).
+          To move your progress to another device, or keep a safety copy, export a backup file and save it wherever you like — iCloud Drive, OneDrive, Google Drive — then import it on the other device.
+        </p>
+        <div class="row">
+          <button class="secondarybtn" data-action="export-backup">↓ Export backup</button>
+          <button class="secondarybtn" data-action="import-backup">↑ Import backup</button>
+        </div>
+        <input type="file" id="backup-input" accept="application/json" style="display:none">
+        <button class="primarybtn" style="margin-top:10px;" data-action="close-backup">Done</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderImport() {
+  return `
+    <header class="top">
+      <button class="iconbtn" data-action="go-library">←</button>
+      <div class="word"><b>Import</b></div>
+      <span style="width:44px"></span>
+    </header>
+    <main>
+      <div class="droptray" id="droptray">
+        <div class="display">Drop a .apkg here</div>
+        <p>or tap to choose a file exported from Anki</p>
+      </div>
+      <input type="file" id="apkg-input" accept=".apkg" style="display:none">
+    </main>
+  `;
+}
+
+function renderImportProgress(msg) {
+  return `
+    <main>
+      <div class="importprog">
+        <div class="display">Importing…</div>
+        <div class="mono">${esc(msg)}</div>
+      </div>
+    </main>
+  `;
+}
+
+function render() {
+  let html = '';
+  if (state.view === 'library') html = renderLibrary();
+  else if (state.view === 'study') html = renderStudy();
+  else if (state.view === 'editor') html = renderEditor();
+  else if (state.view === 'import') html = renderImport();
+  else if (state.view === 'importing') html = renderImportProgress(state.importMsg || '');
+
+  if (state.noteModalOpen) html += renderNoteModal();
+  if (state.showBackup) html += renderBackupModal();
+
+  if (state.pendingDelete) {
+    const count = state.pendingDelete.length;
+    html += `
+      <div class="modal-backdrop" data-action="cancel-delete">
+        <div class="modal-card">
+          <div class="display" style="font-size:20px; margin-bottom:8px;">Delete ${count} deck${count === 1 ? '' : 's'}?</div>
+          <p style="color:var(--ink-soft); font-size:13.5px; margin:0 0 18px;">This removes ${count === 1 ? 'it' : 'them'} and every card inside — there's no undo.</p>
+          <div class="row">
+            <button class="secondarybtn" data-action="cancel-delete">Cancel</button>
+            <button class="primarybtn deletebtn-solid" data-action="confirm-delete">Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.toastMsg) html += `<div class="toast">${esc(state.toastMsg)}</div>`;
+  app.innerHTML = html;
+  bindEvents();
+}
+
+function bindEvents() {
+  app.querySelectorAll('[data-deck]').forEach(el => {
+    el.addEventListener('click', () => startStudy([el.dataset.deck]));
+  });
+  app.querySelectorAll('[data-selectdeck]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.selectdeck;
+      if (state.selectedDecks.has(id)) state.selectedDecks.delete(id);
+      else state.selectedDecks.add(id);
+      render();
+    });
+  });
+  app.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      // The backdrop closes the modal only when clicked directly (not when
+      // a click inside the card bubbles up to it).
+      if (el.classList.contains('modal-backdrop') && e.target !== el) return;
+      // These sit nested inside a clickable drawer/group-header — stop the
+      // click from also bubbling up and triggering the parent's own handler.
+      if (el.dataset.action === 'toggle-group' || el.dataset.action === 'select-group' || el.dataset.action === 'move-deck') {
+        e.stopPropagation();
+      }
+      handleAction(el.dataset.action, el.dataset);
+    });
+  });
+  const drop = document.getElementById('droptray');
+  const fileInput = document.getElementById('apkg-input');
+  if (drop && fileInput) {
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.background = 'var(--paper)'; });
+    drop.addEventListener('dragleave', () => { drop.style.background = 'var(--card)'; });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleImportFile(fileInput.files[0]);
+    });
+  }
+
+  // Double-tap (or double-click) the study card to flip it — works for
+  // touch and mouse alike, without needing a separate reveal button.
+  const studyCard = document.getElementById('study-card');
+  if (studyCard) {
+    let lastTap = 0;
+    studyCard.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastTap < 400) {
+        state.revealed = !state.revealed;
+        render();
+      }
+      lastTap = now;
+    });
+  }
+
+  const backupInput = document.getElementById('backup-input');
+  if (backupInput) {
+    backupInput.addEventListener('change', () => {
+      if (backupInput.files[0]) importBackupFile(backupInput.files[0]);
+    });
+  }
+
+  setupNoteCanvas();
+}
+
+// Wire up the handwriting canvas for notes: draws with pointer/touch input,
+// and restores a previously saved drawing (if any) once the canvas mounts.
+function setupNoteCanvas() {
+  const canvas = document.getElementById('note-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#26302A';
+  canvas.dataset.blank = '1';
+
+  const existing = state.currentNote?.drawing;
+  if (existing) {
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); canvas.dataset.blank = '0'; };
+    img.src = existing;
+  }
+
+  let drawing = false;
+  const pos = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    canvas.setPointerCapture(e.pointerId);
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const p = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    canvas.dataset.dirty = '1';
+    canvas.dataset.blank = '0';
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+    canvas.addEventListener(ev, () => { drawing = false; })
+  );
+}
+
+async function handleImportFile(file) {
+  state.view = 'importing';
+  state.importMsg = 'Starting…';
+  render();
+  try {
+    const result = await importApkg(file, (msg) => { state.importMsg = msg; render(); });
+    await refreshDecks();
+    state.view = 'library';
+    render();
+    showToast(`Imported ${result.cardCount} cards across ${result.deckCount} deck${result.deckCount === 1 ? '' : 's'}.`);
+  } catch (e) {
+    console.error(e);
+    state.view = 'import';
+    render();
+    showToast(e.message || 'Import failed. Try a different export.');
+  }
+}
+
+async function handleAction(action, data) {
+  if (action === 'go-library') { await refreshDecks(); state.view = 'library'; render(); }
+  else if (action === 'go-import') { state.view = 'import'; render(); }
+  else if (action === 'grade') { await gradeCurrent(data.rating); }
+  else if (action === 'edit-current') {
+    state.editingCard = state.queue[state.currentIndex];
+    state.pendingDeckId = null;
+    state.returnToStudy = true;
+    state.view = 'editor';
+    render();
+  }
+  else if (action === 'toggle-reorder') {
+    state.reorderMode = !state.reorderMode;
+    state.selectMode = false;
+    state.selectedDecks = new Set();
+    render();
+  }
+  else if (action === 'move-deck') {
+    await moveDeck(data.deckid, data.dir, data.scope);
+  }
+  else if (action === 'toggle-backup') { state.showBackup = true; render(); }
+  else if (action === 'close-backup') { state.showBackup = false; render(); }
+  else if (action === 'export-backup') { await exportBackup(); }
+  else if (action === 'import-backup') { document.getElementById('backup-input')?.click(); }
+  else if (action === 'open-note') { await openNote(); }
+  else if (action === 'close-note') { state.noteModalOpen = false; render(); }
+  else if (action === 'note-tab') { state.noteTab = data.tab; render(); }
+  else if (action === 'clear-drawing') {
+    const canvas = document.getElementById('note-canvas');
+    if (canvas) {
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      canvas.dataset.dirty = '1';
+      canvas.dataset.blank = '1';
+    }
+  }
+  else if (action === 'save-note') { await saveNote(); }
+  else if (action === 'toggle-group') {
+    if (state.collapsedGroups.has(data.group)) state.collapsedGroups.delete(data.group);
+    else state.collapsedGroups.add(data.group);
+    render();
+  }
+  else if (action === 'toggle-select') {
+    state.selectMode = !state.selectMode;
+    state.reorderMode = false;
+    state.selectedDecks = new Set();
+    render();
+  }
+  else if (action === 'select-group') {
+    const members = state.decks.filter(d => d.group === data.group);
+    const allSelected = members.every(d => state.selectedDecks.has(d.id));
+    members.forEach(d => allSelected ? state.selectedDecks.delete(d.id) : state.selectedDecks.add(d.id));
+    render();
+  }
+  else if (action === 'set-order') {
+    state.studyOrder = data.order;
+    render();
+  }
+  else if (action === 'study-selected') {
+    if (state.selectedDecks.size === 0) return;
+    await startStudy([...state.selectedDecks], state.studyOrder);
+  }
+  else if (action === 'delete-selected') {
+    if (state.selectedDecks.size === 0) return;
+    state.pendingDelete = [...state.selectedDecks];
+    render();
+  }
+  else if (action === 'confirm-delete') {
+    const ids = state.pendingDelete || [];
+    const count = ids.length;
+    state.pendingDelete = null;
+    await deleteDecks(ids);
+    state.selectedDecks = new Set();
+    state.selectMode = false;
+    await refreshDecks();
+    render();
+    showToast(`Deleted ${count} deck${count === 1 ? '' : 's'}.`);
+  }
+  else if (action === 'cancel-delete') {
+    state.pendingDelete = null;
+    render();
+  }
+  else if (action === 'cancel-edit') {
+    state.view = state.returnToStudy ? 'study' : 'library';
+    state.returnToStudy = false;
+    render();
+  }
+  else if (action === 'save-card') {
+    const front = document.getElementById('f-front').value.trim();
+    const back = document.getElementById('f-back').value.trim();
+    if (!front) { showToast('Front side can\'t be empty.'); return; }
+    let c = state.editingCard;
+    if (c && c.id) {
+      c = { ...c, front, back };
+    } else {
+      const targetDeck = state.pendingDeckId || state.studyDeckIds[0] || state.decks[0]?.id;
+      if (!targetDeck) { showToast('Create a deck first.'); return; }
+      c = { id: 'c_' + crypto.randomUUID(), deckId: targetDeck, front, back, ...newCardState() };
+    }
+    await idbPut('cards', c);
+    const qIdx = state.queue.findIndex(q => q.id === c.id);
+    if (qIdx !== -1) state.queue[qIdx] = c;
+    await refreshDecks();
+    state.view = state.returnToStudy ? 'study' : 'library';
+    state.returnToStudy = false;
+    state.pendingDeckId = null;
+    render();
+    showToast('Saved.');
+  }
+  else if (action === 'delete-card') {
+    if (state.editingCard?.id) await idbDelete('cards', state.editingCard.id);
+    await refreshDecks();
+    state.view = 'library';
+    render();
+    showToast('Card deleted.');
+  }
+}
+
+/* ============================= INIT ============================= */
+(async function init() {
+  await refreshDecks();
+  render();
+  if ('serviceWorker' in navigator) {
+    try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('SW failed', e); }
+  }
+})();
+</script>
+</body>
+</html>
