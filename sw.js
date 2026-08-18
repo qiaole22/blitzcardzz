@@ -1,4 +1,4 @@
-const CACHE = 'catalog-v2';
+const CACHE = 'catalog-v3';
 const ASSETS = [
   './',
   './index.html',

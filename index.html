@@ -72,7 +72,7 @@
   .drawer{
     background:var(--card); border:1px solid var(--line); border-radius:10px;
     box-shadow:var(--shadow); position:relative; overflow:hidden;
-    padding:18px 18px 16px; cursor:pointer; transition:transform .12s ease;
+    padding:18px 50px 16px 54px; cursor:pointer; transition:transform .12s ease, background .1s ease, border-color .1s ease;
     min-height:44px;
   }
   .drawer:active{transform:scale(0.985);}
@@ -88,6 +88,21 @@
   .drawer .dot.new{background:var(--sage);}
   .drawer .dot.total{background:var(--brass);}
 
+  .drawer.selected{background:#EAF0E5; border-color:var(--brass);}
+  .drawer .selectbox{
+    position:absolute; left:14px; top:50%; transform:translateY(-50%);
+    width:24px; height:24px; border-radius:7px; border:1.5px solid var(--brass);
+    background:var(--card); color:transparent; font-size:13px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .drawer .selectbox.checked{background:var(--brass); color:var(--card);}
+  .drawer .renamebtn{
+    position:absolute; top:14px; right:14px; width:30px; height:30px; border-radius:8px;
+    background:transparent; border:1px solid var(--line); color:var(--ink-soft);
+    font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .drawer .renamebtn:active{background:var(--paper);}
+
   .drawer.reorderable{padding:18px 96px 16px 18px;}
   .reorderbtns{
     position:absolute; right:0; top:0; bottom:0; width:76px;
@@ -101,18 +116,9 @@
   .reorderbtns button:active{background:var(--paper);}
   .reorderbtns button:disabled{color:var(--line); cursor:default;}
 
-  .drawer.selectable{padding:18px 52px 16px 18px; transition:background .1s ease, border-color .1s ease;}
-  .drawer.selectable.selected{background:#F1EAD8; border-color:var(--brass);}
-  .drawer .checkmark{
-    position:absolute; right:16px; top:50%; transform:translateY(-50%);
-    width:26px; height:26px; border-radius:50%; border:1.5px solid var(--brass);
-    color:var(--card); background:var(--brass); font-size:14px; font-weight:700;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .drawer.selectable:not(.selected) .checkmark{background:transparent; color:transparent;}
   .checkmark.sm{
     width:18px; height:18px; border-radius:5px; border:1.5px solid var(--brass);
-    background:transparent; color:transparent; font-size:11px; font-weight:700; flex-shrink:0;
+    background:var(--card); color:transparent; font-size:11px; font-weight:700; flex-shrink:0;
     display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .checkmark.sm.checked{background:var(--brass); color:var(--card);}
@@ -140,6 +146,11 @@
     position:absolute; top:16px; right:18px; border:1.5px solid var(--rust); color:var(--rust);
     font-size:10px; padding:3px 8px; border-radius:3px; transform:rotate(-6deg);
     font-family:'IBM Plex Mono'; letter-spacing:0.08em; opacity:0.85;
+  }
+  .card .level-badge{
+    position:absolute; top:16px; left:18px; background:var(--paper); color:var(--ink-soft);
+    font-size:10px; padding:3px 9px; border-radius:20px; border:1px solid var(--line);
+    font-family:'IBM Plex Mono'; letter-spacing:0.06em;
   }
   .card .front{
     font-family:'Fraunces','PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif;
@@ -182,6 +193,18 @@
   }
   .notebtn.has-note{color:var(--sage); border-color:var(--sage);}
   .notebtn:active{background:var(--paper);}
+
+  .note-preview{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px; cursor:pointer; text-align:left;
+  }
+  .note-preview:active{background:var(--paper);}
+  .note-preview-text{font-size:14px; color:var(--ink); line-height:1.5; white-space:pre-wrap;}
+  .note-preview-img{max-width:100%; max-height:90px; border-radius:6px; margin-top:8px; display:block; border:1px solid var(--line);}
+  .note-preview-label{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--sage);
+    margin-top:8px; display:flex; align-items:center; gap:5px;
+  }
 
   .note-modal .modal-card{max-width:420px;}
   .note-tabs{display:flex; background:var(--paper); border-radius:8px; padding:3px; gap:3px; margin-bottom:12px;}
@@ -653,7 +676,6 @@ const state = {
   revealed: false,
   editingCard: null,
   toastMsg: null,
-  selectMode: false,
   reorderMode: false,
   selectedDecks: new Set(),
   collapsedGroups: new Set(),
@@ -661,8 +683,10 @@ const state = {
   noteModalOpen: false,
   noteTab: 'type', // 'type' | 'draw'
   currentNote: null, // {cardId, text, drawing} loaded when notepad opens
-  noteHasDrawing: false,
-  showBackup: false
+  showBackup: false,
+  showRename: false,
+  renamingDeck: null,
+  notesByCardId: {}
 };
 
 function showToast(msg) {
@@ -744,7 +768,6 @@ async function startStudy(deckIds, order) {
   state.currentIndex = 0;
   state.revealed = false;
   state.view = 'study';
-  state.selectMode = false;
   state.selectedDecks = new Set();
   await refreshNotedCardIds();
   render();
@@ -752,7 +775,11 @@ async function startStudy(deckIds, order) {
 
 async function refreshNotedCardIds() {
   const allNotes = await idbGetAll('notes');
-  state.notedCardIds = new Set(allNotes.filter(n => n.text || n.drawing).map(n => n.cardId));
+  const map = {};
+  for (const n of allNotes) {
+    if (n.text || n.drawing) map[n.cardId] = n;
+  }
+  state.notesByCardId = map;
 }
 
 async function gradeCurrent(rating) {
@@ -788,10 +815,11 @@ async function saveNote() {
   const note = { cardId: card.id, text, drawing, updatedAt: Date.now() };
   if (!text && !drawing) {
     try { await idbDelete('notes', card.id); } catch (e) {}
+    delete state.notesByCardId[card.id];
   } else {
     await idbPut('notes', note);
+    state.notesByCardId[card.id] = note;
   }
-  await refreshNotedCardIds();
   state.noteModalOpen = false;
   render();
   showToast('Note saved.');
@@ -847,20 +875,6 @@ function esc(s) {
 
 function drawerHtml(d, scopeList) {
   const selected = state.selectedDecks.has(d.id);
-  if (state.selectMode) {
-    return `
-      <div class="drawer selectable ${selected ? 'selected' : ''}" data-selectdeck="${d.id}">
-        <div class="tab"></div>
-        <h3>${esc(d.name)}</h3>
-        <div class="stats">
-          <span class="stat"><span class="dot due"></span>${d.due} due</span>
-          <span class="stat"><span class="dot new"></span>${d.fresh} new</span>
-          <span class="stat"><span class="dot total"></span>${d.total} total</span>
-        </div>
-        <span class="checkmark">${selected ? '✓' : ''}</span>
-      </div>
-    `;
-  }
   if (state.reorderMode && scopeList) {
     const idx = scopeList.findIndex(x => x.id === d.id);
     const scopeKey = d.group || '\0loose';
@@ -881,14 +895,16 @@ function drawerHtml(d, scopeList) {
     `;
   }
   return `
-    <div class="drawer" data-deck="${d.id}">
+    <div class="drawer ${selected ? 'selected' : ''}" data-deck="${d.id}">
       <div class="tab"></div>
+      <span class="selectbox ${selected ? 'checked' : ''}" data-action="toggle-select-deck" data-deckid="${d.id}">${selected ? '✓' : ''}</span>
       <h3>${esc(d.name)}</h3>
       <div class="stats">
         <span class="stat"><span class="dot due"></span>${d.due} due</span>
         <span class="stat"><span class="dot new"></span>${d.fresh} new</span>
         <span class="stat"><span class="dot total"></span>${d.total} total</span>
       </div>
+      <button class="renamebtn" data-action="rename-deck" data-deckid="${d.id}" title="Rename deck">✎</button>
     </div>
   `;
 }
@@ -898,7 +914,6 @@ function renderLibrary() {
     <div style="display:flex; gap:8px;">
       <button class="iconbtn" data-action="toggle-backup" title="Backup & sync">⇅</button>
       <button class="iconbtn ${state.reorderMode ? 'active' : ''}" data-action="toggle-reorder" title="Reorder decks">↕</button>
-      <button class="iconbtn ${state.selectMode ? 'active' : ''}" data-action="toggle-select" title="Select decks">${state.selectMode ? '✕' : '☑'}</button>
     </div>
   `;
 
@@ -938,13 +953,11 @@ function renderLibrary() {
     const collapsed = state.collapsedGroups.has(gname);
     const members = sortDeckGroup(groups[gname]);
     const dueSum = members.reduce((a, d) => a + d.due, 0);
-    const allSelected = state.selectMode && members.every(d => state.selectedDecks.has(d.id));
+    const allSelected = members.every(d => state.selectedDecks.has(d.id));
     return `
       <div class="group">
         <div class="group-header ${collapsed ? 'collapsed' : ''}" data-action="toggle-group" data-group="${esc(gname)}">
-          ${state.selectMode
-            ? `<span class="checkmark sm ${allSelected ? 'checked' : ''}" data-action="select-group" data-group="${esc(gname)}">${allSelected ? '✓' : ''}</span>`
-            : `<div class="tab-sm"></div>`}
+          <span class="checkmark sm ${allSelected ? 'checked' : ''}" data-action="select-group" data-group="${esc(gname)}">${allSelected ? '✓' : ''}</span>
           <h4>${esc(gname)} · ${members.length} decks${dueSum ? ` · ${dueSum} due` : ''}</h4>
           <span class="chev-sm">⌄</span>
         </div>
@@ -959,21 +972,20 @@ function renderLibrary() {
   const looseHtml = looseSorted.map(d => drawerHtml(d, looseSorted)).join('');
 
   const selCount = state.selectedDecks.size;
-  const selectionBar = state.selectMode ? `
+  const selectionBar = selCount > 0 ? `
     <div class="study-actions">
       <div class="study-actions-inner">
-        ${selCount > 0 ? `
-          <div class="selectbar">
-            <div class="ordertoggle">
-              <button class="${state.studyOrder === 'random' ? 'active' : ''}" data-action="set-order" data-order="random">Random</button>
-              <button class="${state.studyOrder === 'sequential' ? 'active' : ''}" data-action="set-order" data-order="sequential">Sequential</button>
-            </div>
-            <div class="row">
-              <button class="secondarybtn deletebtn" data-action="delete-selected">Delete (${selCount})</button>
-              <button class="primarybtn" data-action="study-selected">Study ${selCount} deck${selCount === 1 ? '' : 's'}</button>
-            </div>
+        <div class="selectbar">
+          <div class="ordertoggle">
+            <button class="${state.studyOrder === 'random' ? 'active' : ''}" data-action="set-order" data-order="random">Random</button>
+            <button class="${state.studyOrder === 'sequential' ? 'active' : ''}" data-action="set-order" data-order="sequential">Sequential</button>
           </div>
-        ` : `<div class="hintbar">Tap decks to select them — pick as many as you like, e.g. all of HSK 1–4 together</div>`}
+          <div class="row">
+            <button class="secondarybtn" data-action="clear-selection">Clear</button>
+            <button class="secondarybtn deletebtn" data-action="delete-selected">Delete (${selCount})</button>
+          </div>
+          <button class="primarybtn" data-action="study-selected">Study ${selCount} deck${selCount === 1 ? '' : 's'}</button>
+        </div>
       </div>
     </div>
   ` : '';
@@ -991,8 +1003,8 @@ function renderLibrary() {
       <div class="word"><b>Catalog</b> / study</div>
       ${headerActions}
     </header>
-    <main style="${state.selectMode || state.reorderMode ? 'padding-bottom:150px;' : ''}">${groupsHtml}${looseHtml}</main>
-    ${state.selectMode ? selectionBar : state.reorderMode ? reorderBar : `
+    <main style="${selCount > 0 || state.reorderMode ? 'padding-bottom:150px;' : ''}">${groupsHtml}${looseHtml}</main>
+    ${selCount > 0 ? selectionBar : state.reorderMode ? reorderBar : `
       <nav class="bottom">
         <button data-action="go-import">↓ Import .apkg</button>
       </nav>
@@ -1025,10 +1037,21 @@ function renderStudy() {
 
   const card = state.queue[idx];
   const pct = Math.round((idx / total) * 100);
-  const hasNote = !!state.notedCardIds?.has(card.id);
+  const note = state.notesByCardId?.[card.id];
+  const hasNote = !!note;
+  const cardDeck = state.decks.find(d => d.id === card.deckId);
+  const levelLabel = cardDeck ? cardDeck.name : '';
+
+  const notePreviewOrBtn = hasNote ? `
+    <div class="note-preview" data-action="open-note">
+      ${note.text ? `<div class="note-preview-text">${esc(note.text)}</div>` : ''}
+      ${note.drawing ? `<img class="note-preview-img" src="${note.drawing}">` : ''}
+      <div class="note-preview-label">✎ your note — tap to edit</div>
+    </div>
+  ` : `<button class="notebtn" data-action="open-note">✎ Add note</button>`;
 
   const actions = state.revealed ? `
-    <button class="notebtn ${hasNote ? 'has-note' : ''}" data-action="open-note">✎ ${hasNote ? 'Edit note' : 'Add note'}</button>
+    ${notePreviewOrBtn}
     <div class="gradebtns">
       <button class="g-again" data-action="grade" data-rating="again">Again<span class="iv">${previewIntervalLabel(card,'again')}</span></button>
       <button class="g-hard" data-action="grade" data-rating="hard">Hard<span class="iv">${previewIntervalLabel(card,'hard')}</span></button>
@@ -1043,10 +1066,11 @@ function renderStudy() {
       <div class="word"><b>${esc(title)}</b></div>
       <button class="iconbtn" data-action="edit-current" title="Edit card">✎</button>
     </header>
-    <main class="study-main" style="padding-bottom:${state.revealed ? '210px' : '40px'};">
+    <main class="study-main" style="padding-bottom:${state.revealed ? '230px' : '40px'};">
       <div class="study-wrap">
         <div class="progress-line"><div style="width:${pct}%"></div></div>
         <div class="card" id="study-card">
+          ${levelLabel ? `<div class="level-badge">${esc(levelLabel)}</div>` : ''}
           <div class="stamp">${card.state === 'new' ? 'NEW' : card.state.toUpperCase()}</div>
           <div class="front">${card.front}</div>
           ${state.revealed ? `<div class="rule"></div><div class="back">${card.back}</div>` : ''}
@@ -1084,6 +1108,25 @@ function renderEditor() {
       </div>
       ${!isNew ? `<button class="secondarybtn" data-action="delete-card" style="color:var(--rust); border-color:var(--rust);">Delete card</button>` : ''}
     </main>
+  `;
+}
+
+function renderRenameModal() {
+  const deck = state.renamingDeck || { name: '' };
+  return `
+    <div class="modal-backdrop" data-action="close-rename">
+      <div class="modal-card">
+        <div class="display" style="font-size:18px; margin-bottom:12px;">Rename deck</div>
+        <div class="field">
+          <label>Deck name</label>
+          <input id="rename-input" value="${esc(deck.name)}">
+        </div>
+        <div class="row" style="margin-top:16px;">
+          <button class="secondarybtn" data-action="close-rename">Cancel</button>
+          <button class="primarybtn" data-action="save-rename">Save</button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -1172,6 +1215,7 @@ function render() {
 
   if (state.noteModalOpen) html += renderNoteModal();
   if (state.showBackup) html += renderBackupModal();
+  if (state.showRename) html += renderRenameModal();
 
   if (state.pendingDelete) {
     const count = state.pendingDelete.length;
@@ -1198,14 +1242,6 @@ function bindEvents() {
   app.querySelectorAll('[data-deck]').forEach(el => {
     el.addEventListener('click', () => startStudy([el.dataset.deck]));
   });
-  app.querySelectorAll('[data-selectdeck]').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = el.dataset.selectdeck;
-      if (state.selectedDecks.has(id)) state.selectedDecks.delete(id);
-      else state.selectedDecks.add(id);
-      render();
-    });
-  });
   app.querySelectorAll('[data-action]').forEach(el => {
     el.addEventListener('click', (e) => {
       // The backdrop closes the modal only when clicked directly (not when
@@ -1213,7 +1249,7 @@ function bindEvents() {
       if (el.classList.contains('modal-backdrop') && e.target !== el) return;
       // These sit nested inside a clickable drawer/group-header — stop the
       // click from also bubbling up and triggering the parent's own handler.
-      if (el.dataset.action === 'toggle-group' || el.dataset.action === 'select-group' || el.dataset.action === 'move-deck') {
+      if (['toggle-group', 'select-group', 'move-deck', 'toggle-select-deck', 'rename-deck'].includes(el.dataset.action)) {
         e.stopPropagation();
       }
       handleAction(el.dataset.action, el.dataset);
@@ -1253,6 +1289,15 @@ function bindEvents() {
   if (backupInput) {
     backupInput.addEventListener('change', () => {
       if (backupInput.files[0]) importBackupFile(backupInput.files[0]);
+    });
+  }
+
+  const renameInput = document.getElementById('rename-input');
+  if (renameInput) {
+    renameInput.focus();
+    renameInput.select();
+    renameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleAction('save-rename', {});
     });
   }
 
@@ -1335,8 +1380,6 @@ async function handleAction(action, data) {
   }
   else if (action === 'toggle-reorder') {
     state.reorderMode = !state.reorderMode;
-    state.selectMode = false;
-    state.selectedDecks = new Set();
     render();
   }
   else if (action === 'move-deck') {
@@ -1363,11 +1406,29 @@ async function handleAction(action, data) {
     else state.collapsedGroups.add(data.group);
     render();
   }
-  else if (action === 'toggle-select') {
-    state.selectMode = !state.selectMode;
-    state.reorderMode = false;
-    state.selectedDecks = new Set();
+  else if (action === 'toggle-select-deck') {
+    const id = data.deckid;
+    if (state.selectedDecks.has(id)) state.selectedDecks.delete(id);
+    else state.selectedDecks.add(id);
     render();
+  }
+  else if (action === 'rename-deck') {
+    const deck = state.decks.find(d => d.id === data.deckid);
+    if (!deck) return;
+    state.renamingDeck = deck;
+    state.showRename = true;
+    render();
+  }
+  else if (action === 'close-rename') { state.showRename = false; render(); }
+  else if (action === 'save-rename') {
+    const input = document.getElementById('rename-input');
+    const name = input?.value.trim();
+    if (!name || !state.renamingDeck) return;
+    await idbPut('decks', { ...state.renamingDeck, name });
+    state.showRename = false;
+    await refreshDecks();
+    render();
+    showToast('Deck renamed.');
   }
   else if (action === 'select-group') {
     const members = state.decks.filter(d => d.group === data.group);
@@ -1377,6 +1438,10 @@ async function handleAction(action, data) {
   }
   else if (action === 'set-order') {
     state.studyOrder = data.order;
+    render();
+  }
+  else if (action === 'clear-selection') {
+    state.selectedDecks = new Set();
     render();
   }
   else if (action === 'study-selected') {
@@ -1394,7 +1459,6 @@ async function handleAction(action, data) {
     state.pendingDelete = null;
     await deleteDecks(ids);
     state.selectedDecks = new Set();
-    state.selectMode = false;
     await refreshDecks();
     render();
     showToast(`Deleted ${count} deck${count === 1 ? '' : 's'}.`);
