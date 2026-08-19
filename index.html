@@ -309,7 +309,7 @@
 <script>
 /* ============================= DB LAYER ============================= */
 const DB_NAME = 'catalog-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let dbPromise = null;
 
 function openDB(){
@@ -332,6 +332,9 @@ function openDB(){
       if (!db.objectStoreNames.contains('notes')) {
         const noteStore = db.createObjectStore('notes', { keyPath: 'cardId' });
         noteStore.createIndex('cardId', 'cardId', { unique: true });
+      }
+      if (!db.objectStoreNames.contains('session')) {
+        db.createObjectStore('session', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -770,6 +773,7 @@ async function startStudy(deckIds, order) {
   state.view = 'study';
   state.selectedDecks = new Set();
   await refreshNotedCardIds();
+  await saveSession();
   render();
 }
 
@@ -786,9 +790,65 @@ async function gradeCurrent(rating) {
   const card = state.queue[state.currentIndex];
   const updated = grade(card, rating);
   await idbPut('cards', updated);
+  state.queue[state.currentIndex] = updated;
   state.currentIndex++;
   state.revealed = false;
+  if (state.currentIndex >= state.queue.length) {
+    await clearSession();
+  } else {
+    await saveSession();
+  }
   render();
+}
+
+/* ---------- Session persistence (resume an unfinished round) ---------- */
+// Every grade is written to the 'cards' store immediately, so a card's SRS
+// progress is never at risk. This additionally remembers *where you were*
+// in an in-progress round (which deck(s), order, and how far through the
+// queue) so closing the tab/app mid-round drops you right back in instead
+// of losing your place.
+async function saveSession() {
+  const session = {
+    id: 'current',
+    studyDeckIds: state.studyDeckIds,
+    studyOrder: state.studyOrder,
+    queueIds: state.queue.map(c => c.id),
+    currentIndex: state.currentIndex,
+    savedAt: Date.now()
+  };
+  try { await idbPut('session', session); } catch (e) { /* non-fatal */ }
+}
+
+async function clearSession() {
+  try { await idbDelete('session', 'current'); } catch (e) { /* non-fatal */ }
+}
+
+async function resumeSession() {
+  let session;
+  try { session = await idbGet('session', 'current'); } catch (e) { return false; }
+  if (!session || !Array.isArray(session.queueIds) || !session.queueIds.length) return false;
+  if (session.currentIndex >= session.queueIds.length) { await clearSession(); return false; }
+
+  const idsBeforeCurrent = session.queueIds.slice(0, session.currentIndex);
+  const cardsMap = {};
+  for (const id of session.queueIds) {
+    let c;
+    try { c = await idbGet('cards', id); } catch (e) { c = null; }
+    if (c) cardsMap[id] = c;
+  }
+  const cards = session.queueIds.map(id => cardsMap[id]).filter(Boolean);
+  if (!cards.length) { await clearSession(); return false; }
+  const missingBefore = idsBeforeCurrent.filter(id => !cardsMap[id]).length;
+  const newIndex = Math.max(0, Math.min(cards.length, session.currentIndex - missingBefore));
+
+  state.studyDeckIds = session.studyDeckIds || [];
+  state.studyOrder = session.studyOrder || 'random';
+  state.queue = cards;
+  state.currentIndex = newIndex;
+  state.revealed = false;
+  state.view = 'study';
+  await refreshNotedCardIds();
+  return true;
 }
 
 /* ---------- Notes ---------- */
@@ -1506,7 +1566,9 @@ async function handleAction(action, data) {
 /* ============================= INIT ============================= */
 (async function init() {
   await refreshDecks();
+  const resumed = await resumeSession();
   render();
+  if (resumed) showToast('Resumed where you left off.');
   if ('serviceWorker' in navigator) {
     try { await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn('SW failed', e); }
   }
